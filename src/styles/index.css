@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { --ink:#0A0A0A; --gold:#D4A017; --energy:#F97316; }
+
+html { scroll-behavior: smooth; }
+body { @apply bg-ink text-white font-body antialiased; }
+
+.display { @apply font-display uppercase tracking-wide leading-[0.95]; }
+
+.glass {
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.tricolor {
+  height: 3px;
+  background: linear-gradient(90deg,#FCD116 0%,#FCD116 33%,#003DA5 33%,#003DA5 66%,#CE1126 66%);
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 px-8 py-4 font-semibold uppercase tracking-widest text-sm rounded-full transition-transform duration-300;
+  background: linear-gradient(90deg,var(--energy),var(--gold));
+  color: #0A0A0A;
+}
+.btn-primary:hover { transform: scale(1.04); }
+
+.btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 px-8 py-4 font-semibold uppercase tracking-widest text-sm rounded-full border border-white/25 text-white transition-colors duration-300;
+}
+.btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
+
+@keyframes kenburns {
+  0% { transform: scale(1) translate(0,0); }
+  100% { transform: scale(1.12) translate(-1.5%,-1%); }
+}
+.kenburns { animation: kenburns 22s ease-in-out infinite alternate; }
+
+@media (prefers-reduced-motion: reduce) {
+  .kenburns { animation: none; }
+  html { scroll-behavior: auto; }
+}
+
+input, select, textarea {
+  @apply w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 transition-colors;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--gold); }
+select option { background: #0A0A0A; }
+label { @apply block text-xs uppercase tracking-widest text-white/50 mb-2; }
