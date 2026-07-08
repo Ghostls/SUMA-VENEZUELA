@@ -23,6 +23,7 @@ export interface Participant {
   payment_status?: 'pendiente' | 'verificado'
   registration_status?: 'activo' | 'anulado'
   comprobante_url?: string
+  comprobante_url_2?: string
   ref_bancaria?: string
   notes?: string
   partner_cedula?: string   // ← dupla: cédula del compañero

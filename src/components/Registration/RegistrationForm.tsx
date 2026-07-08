@@ -8,11 +8,13 @@ import { getTasaBCV } from '@/services/Config'
 import { supabase } from '@/lib/supabase'
 
 /**
- * RegistrationForm.tsx — v3.0 (Evolución sin Destrucción)
- * - NUEVO v3.0: Registro de dupla (2 jugadores, un solo formulario)
- * - v2.1: Conversión USD → Bs con tasa sincronizada desde el admin
- * - v2.0: Pasarela Banesco + copiar al portapapeles
- * - v1.x: Upload comprobante, validación, success screen
+ * RegistrationForm.tsx — v3.1 (Evolución sin Destrucción) — FUSIÓN v3.0 + v2.2
+ * - De v3.0 (tuya): arquitectura de dupla completa, PlayerFields reutilizable,
+ *   dos inserts separados, partner_cedula cruzado, divider visual
+ * - De v2.2 (mía): dos slots de comprobante independientes (uno por jugador),
+ *   ComprobanteSlot reutilizable, sufijos -1/-2 en storage
+ * - FIX fusión: STATES → CITY (la constante se llama CITY en dashboard.ts),
+ *   form.state → city en ambos payloads, partner.state → city
  */
 
 const razonSocialLogo = new URL('/src/assets/9.png', import.meta.url).href
@@ -29,13 +31,13 @@ const PRECIO_USD = 20
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const emptyPlayer = () => ({
   first_name: '', last_name: '', cedula: '', email: '', phone: '',
-  gender: '' as '' | 'M' | 'F', age: '', state: '', club: '', category: '',
+  gender: '' as '' | 'M' | 'F', age: '', city: '', club: '', category: '',
 })
 
-async function uploadComprobante(file: File, cedula: string): Promise<string | null> {
+async function uploadComprobante(file: File, cedula: string, suffix = ''): Promise<string | null> {
   if (!supabase) return null
   const ext  = file.name.split('.').pop()
-  const path = `${cedula}-${Date.now()}.${ext}`
+  const path = `${cedula}-${Date.now()}${suffix}.${ext}`
   const { error } = await supabase.storage
     .from('comprobantes')
     .upload(path, file, { upsert: true })
@@ -129,9 +131,9 @@ function PlayerFields({ values, onChange, prefix }: PlayerFieldsProps) {
           onChange={e => onChange('phone', e.target.value)} placeholder="0414-0000000" />
       </div>
       <div>
-        <label htmlFor={`${prefix}-state`}>Ciudad</label>
-        <select id={`${prefix}-state`} value={values.state}
-          onChange={e => onChange('state', e.target.value)}>
+        <label htmlFor={`${prefix}-city`}>Ciudad</label>
+        <select id={`${prefix}-city`} value={values.city}
+          onChange={e => onChange('city', e.target.value)}>
           <option value="">Selecciona</option>
           {STATES.map((s: string) => <option key={s}>{s}</option>)}
         </select>
@@ -156,17 +158,72 @@ function PlayerFields({ values, onChange, prefix }: PlayerFieldsProps) {
   )
 }
 
+// ── ComprobanteSlot ───────────────────────────────────────────────────────────
+function ComprobanteSlot({
+  label, file, preview, onFile, onClear,
+}: {
+  label: string
+  file: File | null
+  preview: string | null
+  onFile: (f: File | null) => void
+  onClear: () => void
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  return (
+    <div className="flex-1 min-w-0">
+      <p className="text-xs text-white/50 mb-1">{label}</p>
+      {!preview ? (
+        <div
+          onClick={() => ref.current?.click()}
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => { e.preventDefault(); onFile(e.dataTransfer.files[0] ?? null) }}
+          className="cursor-pointer rounded-xl border border-dashed border-white/20 hover:border-gold/50 transition-colors p-5 flex flex-col items-center gap-2 text-center"
+        >
+          <Upload size={22} className="text-white/30" />
+          <p className="text-xs text-white/50">Arrastra o <span className="text-gold">selecciona</span></p>
+          <input
+            ref={ref}
+            type="file"
+            accept="image/jpeg,image/png,application/pdf"
+            className="hidden"
+            onChange={e => onFile(e.target.files?.[0] ?? null)}
+          />
+        </div>
+      ) : (
+        <div className="relative rounded-xl overflow-hidden border border-gold/30">
+          <img src={preview} alt="Comprobante" className="w-full max-h-40 object-contain bg-black/40" />
+          <button
+            onClick={onClear}
+            className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 flex items-center justify-center text-white hover:bg-red-500/80 transition-colors"
+          >
+            <X size={12} />
+          </button>
+          <div className="flex items-center gap-2 px-2 py-1.5 bg-black/40">
+            <FileImage size={12} className="text-gold flex-shrink-0" />
+            <span className="text-xs text-white/60 truncate">{file?.name}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function RegistrationForm() {
-  const [form, setForm]       = useState({ ...emptyPlayer(), ref_bancaria: '', accept: false })
-  const [partner, setPartner] = useState(emptyPlayer())
-  const [file, setFile]       = useState<File | null>(null)
-  const [preview, setPreview] = useState<string | null>(null)
-  const [sending, setSending] = useState(false)
-  const [done, setDone]       = useState(false)
-  const [error, setError]     = useState<string | null>(null)
-  const [tasa, setTasa]       = useState<number | null>(null)
-  const fileRef               = useRef<HTMLInputElement>(null)
+  const [form, setForm]         = useState({ ...emptyPlayer(), ref_bancaria: '', accept: false })
+  const [partner, setPartner]   = useState(emptyPlayer())
+
+  // Comprobante jugador 1
+  const [file1, setFile1]       = useState<File | null>(null)
+  const [preview1, setPreview1] = useState<string | null>(null)
+  // Comprobante jugador 2
+  const [file2, setFile2]       = useState<File | null>(null)
+  const [preview2, setPreview2] = useState<string | null>(null)
+
+  const [sending, setSending]   = useState(false)
+  const [done, setDone]         = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+  const [tasa, setTasa]         = useState<number | null>(null)
 
   useEffect(() => { getTasaBCV().then(setTasa) }, [])
 
@@ -178,7 +235,11 @@ export default function RegistrationForm() {
   const setPartnerField = (k: keyof ReturnType<typeof emptyPlayer>, v: string) =>
     setPartner(p => ({ ...p, [k]: v, ...(k === 'gender' ? { category: '' } : {}) }))
 
-  const handleFile = (f: File | null) => {
+  const handleFile = (
+    f: File | null,
+    setFile: (f: File | null) => void,
+    setPreview: (p: string | null) => void,
+  ) => {
     if (!f) { setFile(null); setPreview(null); return }
     if (f.size > 5 * 1024 * 1024) { setError('El archivo no puede superar 5 MB.'); return }
     setFile(f); setError(null)
@@ -189,7 +250,7 @@ export default function RegistrationForm() {
 
   const playerValid = (p: ReturnType<typeof emptyPlayer>) =>
     p.first_name && p.last_name && p.cedula && p.email && p.phone &&
-    p.gender && p.age && p.state && p.club && p.category
+    p.gender && p.age && p.city && p.club && p.category
 
   const valid = playerValid(form) && playerValid(partner) && form.accept
 
@@ -197,26 +258,35 @@ export default function RegistrationForm() {
     if (!valid || sending) return
     setSending(true); setError(null)
 
+    // Subir comprobantes con sufijos distintos en storage
     let comprobante_url: string | undefined
-    if (file) {
-      const path = await uploadComprobante(file, form.cedula.replace(/\//g, '-'))
+    let comprobante_url_2: string | undefined
+
+    if (file1) {
+      const path = await uploadComprobante(file1, form.cedula.replace(/\//g, '-'), '-1')
       if (path) comprobante_url = path
     }
+    if (file2) {
+      const path = await uploadComprobante(file2, partner.cedula.replace(/\//g, '-'), '-2')
+      if (path) comprobante_url_2 = path
+    }
 
+    // Insert jugador 1 — lleva comprobante_url (propio) y comprobante_url_2 (del compañero)
     const { error: err1 } = await createParticipant({
-      first_name:      form.first_name.trim(),
-      last_name:       form.last_name.trim(),
-      cedula:          form.cedula.trim(),
-      email:           form.email.trim(),
-      phone:           form.phone.trim(),
-      gender:          form.gender as 'M' | 'F',
-      age:             Number(form.age),
-      city:            form.state,
-      club:            form.club,
-      category:        form.category,
-      ref_bancaria:    form.ref_bancaria.trim() || undefined,
+      first_name:        form.first_name.trim(),
+      last_name:         form.last_name.trim(),
+      cedula:            form.cedula.trim(),
+      email:             form.email.trim(),
+      phone:             form.phone.trim(),
+      gender:            form.gender as 'M' | 'F',
+      age:               Number(form.age),
+      city:              form.city,
+      club:              form.club,
+      category:          form.category,
+      ref_bancaria:      form.ref_bancaria.trim() || undefined,
       comprobante_url,
-      partner_cedula:  partner.cedula.trim(),
+      comprobante_url_2,
+      partner_cedula:    partner.cedula.trim(),
     })
 
     if (err1) {
@@ -225,20 +295,22 @@ export default function RegistrationForm() {
       return
     }
 
+    // Insert jugador 2 — referencia y comprobantes compartidos, partner_cedula invertido
     const { error: err2 } = await createParticipant({
-      first_name:      partner.first_name.trim(),
-      last_name:       partner.last_name.trim(),
-      cedula:          partner.cedula.trim(),
-      email:           partner.email.trim(),
-      phone:           partner.phone.trim(),
-      gender:          partner.gender as 'M' | 'F',
-      age:             Number(partner.age),
-      city:            partner.state,
-      club:            partner.club,
-      category:        partner.category,
-      ref_bancaria:    form.ref_bancaria.trim() || undefined,
-      comprobante_url,
-      partner_cedula:  form.cedula.trim(),
+      first_name:        partner.first_name.trim(),
+      last_name:         partner.last_name.trim(),
+      cedula:            partner.cedula.trim(),
+      email:             partner.email.trim(),
+      phone:             partner.phone.trim(),
+      gender:            partner.gender as 'M' | 'F',
+      age:               Number(partner.age),
+      city:              partner.city,
+      club:              partner.club,
+      category:          partner.category,
+      ref_bancaria:      form.ref_bancaria.trim() || undefined,
+      comprobante_url:   comprobante_url_2,   // el comprobante del J2 va como principal
+      comprobante_url_2: comprobante_url,     // el del J1 como secundario para referencia
+      partner_cedula:    form.cedula.trim(),
     })
 
     setSending(false)
@@ -272,8 +344,7 @@ export default function RegistrationForm() {
           animate={{ opacity: 1, y: 0 }}
           className="glass rounded-3xl p-6 md:p-12 space-y-10"
         >
-
-          {/* ── Jugador 1 ───────────────────────────────────────────── */}
+          {/* ── Jugador 1 ─────────────────────────────────────────────── */}
           <section>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-8 h-8 rounded-full bg-gold/20 border border-gold/40 flex items-center justify-center text-gold text-sm font-bold">1</div>
@@ -282,7 +353,7 @@ export default function RegistrationForm() {
             <PlayerFields values={form} onChange={setMain} prefix="j1" />
           </section>
 
-          {/* ── Divider ─────────────────────────────────────────────── */}
+          {/* ── Divider ───────────────────────────────────────────────── */}
           <div className="flex items-center gap-4">
             <div className="flex-1 h-px bg-white/10" />
             <div className="flex items-center gap-2 text-white/30 text-xs uppercase tracking-widest">
@@ -292,7 +363,7 @@ export default function RegistrationForm() {
             <div className="flex-1 h-px bg-white/10" />
           </div>
 
-          {/* ── Jugador 2 ───────────────────────────────────────────── */}
+          {/* ── Jugador 2 ─────────────────────────────────────────────── */}
           <section>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white/60 text-sm font-bold">2</div>
@@ -301,7 +372,7 @@ export default function RegistrationForm() {
             <PlayerFields values={partner} onChange={setPartnerField} prefix="j2" />
           </section>
 
-          {/* ── Pasarela de pago ─────────────────────────────────────── */}
+          {/* ── Pasarela de pago ──────────────────────────────────────── */}
           <div
             className="rounded-2xl p-5 md:p-6"
             style={{
@@ -311,10 +382,12 @@ export default function RegistrationForm() {
           >
             <div className="flex items-center gap-2 mb-1">
               <Landmark size={16} className="text-gold" />
-              <p className="text-xs uppercase tracking-widest text-gold">Información de pago — {PRECIO_USD} USD <span className="normal-case tracking-normal text-white/40 text-[11px]">por persona</span></p>
+              <p className="text-xs uppercase tracking-widest text-gold">
+                Información de pago — {PRECIO_USD} USD{' '}
+                <span className="normal-case tracking-normal text-white/40 text-[11px]">por persona</span>
+              </p>
             </div>
 
-            {/* Conversión Bs */}
             {totalBs !== null ? (
               <div className="inline-flex items-baseline gap-2 mb-2 rounded-lg px-3 py-1.5 bg-gold/10 border border-gold/25">
                 <span className="text-lg md:text-xl font-mono text-gold">
@@ -334,7 +407,6 @@ export default function RegistrationForm() {
               Realiza la transferencia a la siguiente cuenta y luego registra tu referencia y comprobante.
             </p>
 
-            {/* Datos bancarios */}
             <div className="rounded-xl bg-black/30 border border-white/10 px-4 py-2 mb-5">
               <div className="flex items-center justify-between gap-3 py-3 border-b border-white/10">
                 <p className="text-[10px] uppercase tracking-widest text-white/40">Razón social</p>
@@ -360,48 +432,32 @@ export default function RegistrationForm() {
               />
             </div>
 
-            <label>
-              Comprobante de pago{' '}
-              <span className="text-white/30 normal-case tracking-normal">(opcional · JPG, PNG o PDF · máx 5 MB)</span>
+            {/* ── Dos slots de comprobante ────────────────────────────── */}
+            <label className="block mb-2">
+              Comprobante(s) de pago{' '}
+              <span className="text-white/30 normal-case tracking-normal">
+                (si cada jugador pagó por separado, sube los dos · JPG, PNG o PDF · máx 5 MB c/u)
+              </span>
             </label>
-
-            {!preview ? (
-              <div
-                onClick={() => fileRef.current?.click()}
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0] ?? null) }}
-                className="mt-1 cursor-pointer rounded-xl border border-dashed border-white/20 hover:border-gold/50 transition-colors p-8 flex flex-col items-center gap-3 text-center"
-              >
-                <Upload size={28} className="text-white/30" />
-                <p className="text-sm text-white/50">
-                  Arrastra tu comprobante aquí o <span className="text-gold">haz clic para seleccionar</span>
-                </p>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/jpeg,image/png,application/pdf"
-                  className="hidden"
-                  onChange={e => handleFile(e.target.files?.[0] ?? null)}
-                />
-              </div>
-            ) : (
-              <div className="mt-1 relative rounded-xl overflow-hidden border border-gold/30">
-                <img src={preview} alt="Comprobante" className="w-full max-h-52 object-contain bg-black/40" />
-                <button
-                  onClick={() => { setFile(null); setPreview(null) }}
-                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 flex items-center justify-center text-white hover:bg-red-500/80 transition-colors"
-                >
-                  <X size={14} />
-                </button>
-                <div className="flex items-center gap-2 px-3 py-2 bg-black/40">
-                  <FileImage size={14} className="text-gold" />
-                  <span className="text-xs text-white/60 truncate">{file?.name}</span>
-                </div>
-              </div>
-            )}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <ComprobanteSlot
+                label="Jugador 1"
+                file={file1}
+                preview={preview1}
+                onFile={f => handleFile(f, setFile1, setPreview1)}
+                onClear={() => { setFile1(null); setPreview1(null) }}
+              />
+              <ComprobanteSlot
+                label="Jugador 2 (opcional)"
+                file={file2}
+                preview={preview2}
+                onFile={f => handleFile(f, setFile2, setPreview2)}
+                onClear={() => { setFile2(null); setPreview2(null) }}
+              />
+            </div>
           </div>
 
-          {/* ── Términos ─────────────────────────────────────────────── */}
+          {/* ── Términos ──────────────────────────────────────────────── */}
           <label className="flex items-start gap-3 cursor-pointer normal-case tracking-normal text-sm text-white/70">
             <input
               type="checkbox"
