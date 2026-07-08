@@ -16,13 +16,14 @@ export interface Participant {
   phone: string
   gender: 'M' | 'F'
   age: number
-  state: string
+  city: string
   club: string
   category: string
-  level: string
+  level?: string
   payment_status?: 'pendiente' | 'verificado'
   registration_status?: 'activo' | 'anulado'
-  comprobante_url?: string   // ← agrega esto
-  ref_bancaria?: string   
+  comprobante_url?: string
+  ref_bancaria?: string
   notes?: string
+  partner_cedula?: string   // ← dupla: cédula del compañero
 }

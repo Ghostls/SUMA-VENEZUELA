@@ -42,3 +42,13 @@ export function subscribeParticipants(onChange: () => void) {
     .subscribe()
   return () => { supabase?.removeChannel(channel) }
 }
+
+// ── URL firmada para comprobante (bucket: comprobantes, 1 hora) ───────────────
+export async function getComprobanteUrl(path: string): Promise<string | null> {
+  if (!supabase || !path) return null
+  const { data, error } = await supabase.storage
+    .from('comprobantes')
+    .createSignedUrl(path, 3600) // 1 hora de validez
+  if (error) { console.error('getComprobanteUrl:', error); return null }
+  return data.signedUrl
+}

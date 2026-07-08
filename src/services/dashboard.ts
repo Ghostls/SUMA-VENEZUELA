@@ -1,7 +1,7 @@
 import type { Participant } from '@/lib/supabase'
 
 export const INSCRIPTION_USD = 20
-export const NATIONAL_GOAL = 200 // meta nacional de inscritos
+export const NATIONAL_GOAL = 200
 
 export const STATES = ['Barquisimeto', 'Caracas', 'Maracay', 'Mérida', 'Lechería', 'Margarita', 'Maturin']
 
@@ -41,17 +41,17 @@ export function computeStats(list: Participant[]): DashboardStats {
   const byClub: Record<string, number> = {}
   let male = 0, female = 0
   for (const p of active) {
-    byState[p.state] = (byState[p.state] || 0) + 1
-    byClub[p.club] = (byClub[p.club] || 0) + 1
+    byState[p.city] = (byState[p.city] || 0) + 1   // ← city (columna real)
+    byClub[p.club]  = (byClub[p.club]  || 0) + 1
     p.gender === 'M' ? male++ : female++
   }
   const total = active.length
   return {
     total, male, female,
     activeStates: Object.keys(byState).length,
-    activeClubs: Object.keys(byClub).length,
-    raised: total * INSCRIPTION_USD,
-    goalPct: Math.min(100, Math.round((total / NATIONAL_GOAL) * 100)),
+    activeClubs:  Object.keys(byClub).length,
+    raised:   total * INSCRIPTION_USD,
+    goalPct:  Math.min(100, Math.round((total / NATIONAL_GOAL) * 100)),
     byState, byClub,
   }
 }
