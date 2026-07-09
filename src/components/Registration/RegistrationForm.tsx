@@ -2,15 +2,22 @@ import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { CheckCircle2, PartyPopper, Upload, X, FileImage, Copy, Check, Landmark, Users } from 'lucide-react'
-import { STATES, CLUBS, CATEGORIES } from '@/services/dashboard'
+import { CITY, CLUBS, CATEGORIES } from '@/services/dashboard'
 import { createParticipant } from '@/services/participants'
 import { getTasaBCV } from '@/services/Config'
 import { supabase } from '@/lib/supabase'
 
 /**
- * RegistrationForm.tsx — v3.2 (Evolución sin Destrucción)
- * - FIX v3.2: STATES → CITY en PlayerFields (el import correcto de dashboard.ts)
- * - v3.1: fusión dupla completa + dos comprobantes, ComprobanteSlot, sufijos storage
+ * RegistrationForm.tsx — v3.3 (Evolución sin Destrucción)
+ * - NUEVO v3.3a: auto-asignación de club al seleccionar ciudad —
+ *   si la ciudad tiene un solo club en CLUBS, se asigna automáticamente
+ *   y el select de club se deshabilita (no hay que elegir)
+ * - NUEVO v3.3b: categorías especiales para La Marina Sport Club:
+ *   Masculino → ['Suma 9', 'Suma 11', 'Séptima']
+ *   Femenino  → ['Suma 10', 'Suma 13']
+ *   El resto de clubes usa CATEGORIES de dashboard.ts sin cambios
+ * - v3.2: FIX STATES → CITY en PlayerFields
+ * - v3.1: dupla completa + dos comprobantes, ComprobanteSlot, sufijos storage
  * - v3.0: arquitectura dupla, PlayerFields, partner_cedula cruzado
  * - v2.x: pasarela Banesco, tasa BCV sincronizada, copiar datos bancarios
  */
@@ -26,6 +33,25 @@ const BANK_DATA = {
 
 const PRECIO_USD = 20
 
+// ── Categorías especiales por club ───────────────────────────────────────────
+const CLUB_CATEGORIES: Record<string, Record<'M' | 'F', string[]>> = {
+  'La Marina Sport Club': {
+    M: ['Suma 9', 'Suma 11'],
+    F: ['Suma 10', 'Suma 13'],
+  },
+}
+
+// Devuelve las categorías correctas para un club y género dados
+function getCategoriesForClub(club: string, gender: 'M' | 'F'): string[] {
+  return CLUB_CATEGORIES[club]?.[gender] ?? CATEGORIES[gender]
+}
+
+// Devuelve los clubes disponibles para una ciudad
+function getClubsForCity(city: string) {
+  return CLUBS.filter(c => c.state === city)
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 const emptyPlayer = () => ({
   first_name: '', last_name: '', cedula: '', email: '', phone: '',
   gender: '' as '' | 'M' | 'F', age: '', city: '', club: '', category: '',
@@ -86,6 +112,34 @@ interface PlayerFieldsProps {
 }
 
 function PlayerFields({ values, onChange, prefix }: PlayerFieldsProps) {
+  const cityClubs      = getClubsForCity(values.city)
+  const autoAssigned   = cityClubs.length === 1
+  const categories     = values.club && values.gender
+    ? getCategoriesForClub(values.club, values.gender as 'M' | 'F')
+    : []
+
+  // Auto-asignar club cuando la ciudad tiene exactamente uno
+  const handleCityChange = (city: string) => {
+    const clubs = getClubsForCity(city)
+    onChange('city', city)
+    if (clubs.length === 1) {
+      onChange('club', clubs[0].name)
+    } else {
+      onChange('club', '')
+    }
+    onChange('category', '') // resetear categoría al cambiar ciudad
+  }
+
+  // Resetear categoría al cambiar club o género
+  const handleClubChange = (club: string) => {
+    onChange('club', club)
+    onChange('category', '')
+  }
+  const handleGenderChange = (gender: string) => {
+    onChange('gender', gender)
+    onChange('category', '')
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
       <div>
@@ -111,7 +165,7 @@ function PlayerFields({ values, onChange, prefix }: PlayerFieldsProps) {
       <div>
         <label htmlFor={`${prefix}-gender`}>Sexo</label>
         <select id={`${prefix}-gender`} value={values.gender}
-          onChange={e => onChange('gender', e.target.value)}>
+          onChange={e => handleGenderChange(e.target.value)}>
           <option value="">Selecciona</option>
           <option value="M">Masculino</option>
           <option value="F">Femenino</option>
@@ -127,28 +181,69 @@ function PlayerFields({ values, onChange, prefix }: PlayerFieldsProps) {
         <input id={`${prefix}-phone`} value={values.phone}
           onChange={e => onChange('phone', e.target.value)} placeholder="0414-0000000" />
       </div>
+
+      {/* Ciudad — al cambiar auto-asigna club si hay uno solo */}
       <div>
         <label htmlFor={`${prefix}-city`}>Ciudad</label>
         <select id={`${prefix}-city`} value={values.city}
-          onChange={e => onChange('city', e.target.value)}>
+          onChange={e => handleCityChange(e.target.value)}>
           <option value="">Selecciona</option>
-          {STATES.map((s: string) => <option key={s}>{s}</option>)}
+          {CITY.map((s: string) => <option key={s}>{s}</option>)}
         </select>
       </div>
+
+      {/* Club — deshabilitado si fue auto-asignado */}
       <div>
-        <label htmlFor={`${prefix}-club`}>Club</label>
-        <select id={`${prefix}-club`} value={values.club}
-          onChange={e => onChange('club', e.target.value)}>
-          <option value="">Selecciona</option>
-          {CLUBS.map(c => <option key={c.name}>{c.name}</option>)}
+        <label htmlFor={`${prefix}-club`}>
+          Club
+          {autoAssigned && values.club && (
+            <span className="ml-2 text-[10px] text-gold/70 normal-case tracking-normal">
+              · asignado automáticamente
+            </span>
+          )}
+        </label>
+        <select
+          id={`${prefix}-club`}
+          value={values.club}
+          onChange={e => handleClubChange(e.target.value)}
+          disabled={!values.city || autoAssigned}
+          className={autoAssigned ? 'opacity-60 cursor-not-allowed' : ''}
+        >
+          <option value="">
+            {!values.city
+              ? 'Primero selecciona la ciudad'
+              : autoAssigned
+              ? values.club
+              : 'Selecciona'}
+          </option>
+          {cityClubs.map(c => <option key={c.name}>{c.name}</option>)}
         </select>
       </div>
+
+      {/* Categoría — usa las categorías del club si las tiene */}
       <div className="md:col-span-2">
-        <label htmlFor={`${prefix}-category`}>Categoría</label>
-        <select id={`${prefix}-category`} value={values.category}
-          onChange={e => onChange('category', e.target.value)} disabled={!values.gender}>
-          <option value="">{values.gender ? 'Selecciona' : 'Primero selecciona el sexo'}</option>
-          {values.gender && CATEGORIES[values.gender as 'M' | 'F'].map(c => <option key={c}>{c}</option>)}
+        <label htmlFor={`${prefix}-category`}>
+          Categoría
+          {values.club && CLUB_CATEGORIES[values.club] && (
+            <span className="ml-2 text-[10px] text-gold/70 normal-case tracking-normal">
+              · categorías especiales de {values.club}
+            </span>
+          )}
+        </label>
+        <select
+          id={`${prefix}-category`}
+          value={values.category}
+          onChange={e => onChange('category', e.target.value)}
+          disabled={!values.gender || !values.club}
+        >
+          <option value="">
+            {!values.gender
+              ? 'Primero selecciona el sexo'
+              : !values.club
+              ? 'Primero selecciona el club'
+              : 'Selecciona'}
+          </option>
+          {categories.map(c => <option key={c}>{c}</option>)}
         </select>
       </div>
     </div>
@@ -223,10 +318,10 @@ export default function RegistrationForm() {
   const totalBs = tasa ? PRECIO_USD * tasa : null
 
   const setMain = (k: keyof ReturnType<typeof emptyPlayer>, v: string) =>
-    setForm(f => ({ ...f, [k]: v, ...(k === 'gender' ? { category: '' } : {}) }))
+    setForm(f => ({ ...f, [k]: v }))
 
   const setPartnerField = (k: keyof ReturnType<typeof emptyPlayer>, v: string) =>
-    setPartner(p => ({ ...p, [k]: v, ...(k === 'gender' ? { category: '' } : {}) }))
+    setPartner(p => ({ ...p, [k]: v }))
 
   const handleFile = (
     f: File | null,
