@@ -8,13 +8,11 @@ import { getTasaBCV } from '@/services/Config'
 import { supabase } from '@/lib/supabase'
 
 /**
- * RegistrationForm.tsx — v3.1 (Evolución sin Destrucción) — FUSIÓN v3.0 + v2.2
- * - De v3.0 (tuya): arquitectura de dupla completa, PlayerFields reutilizable,
- *   dos inserts separados, partner_cedula cruzado, divider visual
- * - De v2.2 (mía): dos slots de comprobante independientes (uno por jugador),
- *   ComprobanteSlot reutilizable, sufijos -1/-2 en storage
- * - FIX fusión: STATES → CITY (la constante se llama CITY en dashboard.ts),
- *   form.state → city en ambos payloads, partner.state → city
+ * RegistrationForm.tsx — v3.2 (Evolución sin Destrucción)
+ * - FIX v3.2: STATES → CITY en PlayerFields (el import correcto de dashboard.ts)
+ * - v3.1: fusión dupla completa + dos comprobantes, ComprobanteSlot, sufijos storage
+ * - v3.0: arquitectura dupla, PlayerFields, partner_cedula cruzado
+ * - v2.x: pasarela Banesco, tasa BCV sincronizada, copiar datos bancarios
  */
 
 const razonSocialLogo = new URL('/src/assets/9.png', import.meta.url).href
@@ -28,7 +26,6 @@ const BANK_DATA = {
 
 const PRECIO_USD = 20
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 const emptyPlayer = () => ({
   first_name: '', last_name: '', cedula: '', email: '', phone: '',
   gender: '' as '' | 'M' | 'F', age: '', city: '', club: '', category: '',
@@ -212,14 +209,10 @@ function ComprobanteSlot({
 export default function RegistrationForm() {
   const [form, setForm]         = useState({ ...emptyPlayer(), ref_bancaria: '', accept: false })
   const [partner, setPartner]   = useState(emptyPlayer())
-
-  // Comprobante jugador 1
   const [file1, setFile1]       = useState<File | null>(null)
   const [preview1, setPreview1] = useState<string | null>(null)
-  // Comprobante jugador 2
   const [file2, setFile2]       = useState<File | null>(null)
   const [preview2, setPreview2] = useState<string | null>(null)
-
   const [sending, setSending]   = useState(false)
   const [done, setDone]         = useState(false)
   const [error, setError]       = useState<string | null>(null)
@@ -258,7 +251,6 @@ export default function RegistrationForm() {
     if (!valid || sending) return
     setSending(true); setError(null)
 
-    // Subir comprobantes con sufijos distintos en storage
     let comprobante_url: string | undefined
     let comprobante_url_2: string | undefined
 
@@ -271,7 +263,6 @@ export default function RegistrationForm() {
       if (path) comprobante_url_2 = path
     }
 
-    // Insert jugador 1 — lleva comprobante_url (propio) y comprobante_url_2 (del compañero)
     const { error: err1 } = await createParticipant({
       first_name:        form.first_name.trim(),
       last_name:         form.last_name.trim(),
@@ -295,7 +286,6 @@ export default function RegistrationForm() {
       return
     }
 
-    // Insert jugador 2 — referencia y comprobantes compartidos, partner_cedula invertido
     const { error: err2 } = await createParticipant({
       first_name:        partner.first_name.trim(),
       last_name:         partner.last_name.trim(),
@@ -308,8 +298,8 @@ export default function RegistrationForm() {
       club:              partner.club,
       category:          partner.category,
       ref_bancaria:      form.ref_bancaria.trim() || undefined,
-      comprobante_url:   comprobante_url_2,   // el comprobante del J2 va como principal
-      comprobante_url_2: comprobante_url,     // el del J1 como secundario para referencia
+      comprobante_url:   comprobante_url_2,
+      comprobante_url_2: comprobante_url,
       partner_cedula:    form.cedula.trim(),
     })
 
@@ -432,7 +422,6 @@ export default function RegistrationForm() {
               />
             </div>
 
-            {/* ── Dos slots de comprobante ────────────────────────────── */}
             <label className="block mb-2">
               Comprobante(s) de pago{' '}
               <span className="text-white/30 normal-case tracking-normal">

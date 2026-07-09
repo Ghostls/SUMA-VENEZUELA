@@ -3,17 +3,36 @@ import type { Participant } from '@/lib/supabase'
 export const INSCRIPTION_USD = 20
 export const NATIONAL_GOAL = 200
 
-export const STATES = ['Barquisimeto', 'Caracas', 'Maracay', 'Mérida', 'Lechería', 'Margarita', 'Maturin']
+// CITY y STATES apuntan al mismo array — CITY es el nombre usado en los forms
+// STATES se mantiene por compatibilidad con useParticipants y otros consumidores
+export const CITY = [
+  'Barquisimeto',
+  'Caracas',
+  'Maracay',
+  'Mérida',
+  'Lechería',
+  'Margarita',
+  'Maturín',
+  'Barinas',        // ← nuevo: Padel Sports Barinas
+  'San Cristóbal',  // ← nuevo: Smash Padel + Andes Padel
+  'Puerto Cabello',
+  'Puerto Ordaz', // ← nuevo: Waikiki Beach Padel Club
+]
+
+export const STATES = CITY // alias para compatibilidad
 
 export const CLUBS = [
-  { name: 'Victoria Padel Club', state: 'Barquisimeto', goal: 32 },
-  { name: 'Capital Sports', state: 'Caracas', goal: 32 },
-  { name: 'Olympus Sport Club', state: 'Maracay', goal: 32 },
-  { name: 'Metro Atletik', state: 'Caracas', goal: 32 },
-  { name: 'Mérida Pádel Tour', state: 'Mérida', goal: 32 },
-  { name: 'La Marina Sport Club', state: 'Lechería', goal: 32 },
-  { name: 'Margarita Pádel Club', state: 'Margarita', goal: 32 },
-  { name: 'Maturín Pádel Club', state: 'Maturín', goal: 32 },
+  { name: 'Victoria Padel Club',      state: 'Barquisimeto',  goal: 32 },
+  { name: 'Capital Sports',           state: 'Caracas',       goal: 32 },
+  { name: 'Olympus Sport Club',       state: 'Maracay',       goal: 32 },
+  { name: 'Metro Atletik',            state: 'Mérida',       goal: 32 },
+  { name: 'La Marina Sport Club',     state: 'Lechería',      goal: 32 },
+  { name: 'Margarita Pádel Club',     state: 'Margarita',     goal: 32 },
+  { name: 'Saque Pádel Club',       state: 'Maturín',       goal: 32 },
+  { name: 'Padel Sports Barinas',     state: 'Barinas',       goal: 32 }, // ← nuevo
+  { name: 'Smash Padel',state: 'San Cristóbal', goal: 32 }, // ← nuevo
+  { name: 'Arenas Padel Club',        state: 'Puerto Ordaz',      goal: 32 }, // ← nuevo
+  { name: 'Waikiki Beach Padel Club', state: 'Puerto Cabello',      goal: 32 }, // ← nuevo
 ]
 
 export const CATEGORIES: Record<'M' | 'F', string[]> = {
@@ -21,7 +40,6 @@ export const CATEGORIES: Record<'M' | 'F', string[]> = {
   F: ['Suma 10'],
 }
 
-export const LEVELS = ['Iniciación', 'Intermedio', 'Avanzado', 'Competitivo']
 
 export interface DashboardStats {
   total: number
@@ -41,7 +59,7 @@ export function computeStats(list: Participant[]): DashboardStats {
   const byClub: Record<string, number> = {}
   let male = 0, female = 0
   for (const p of active) {
-    byState[p.city] = (byState[p.city] || 0) + 1   // ← city (columna real)
+    byState[p.city] = (byState[p.city] || 0) + 1
     byClub[p.club]  = (byClub[p.club]  || 0) + 1
     p.gender === 'M' ? male++ : female++
   }

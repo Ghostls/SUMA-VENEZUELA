@@ -1,7 +1,30 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Shield } from 'lucide-react'
 import { CLUBS } from '@/services/dashboard'
+
+/**
+ * Clubs.tsx — v2.0 (Evolución sin Destrucción)
+ * - NUEVO v2.0: cada card muestra el logo del club en vez del ícono Shield
+ * - v1.0: glassmorphism cards, progress bar animada, hover effects
+ */
+
+// Mapeo club → logo (mismo patrón import.meta.url que el Hero)
+const CLUB_LOGOS: Record<string, string> = {
+  'Victoria Padel Club':      new URL('/src/assets/2.png',  import.meta.url).href,
+  'Capital Sports':           new URL('/src/assets/3.png',  import.meta.url).href,
+  'La Marina Sport Club':     new URL('/src/assets/4.png',  import.meta.url).href,
+  'Olympus Sport Club':       new URL('/src/assets/5.png',  import.meta.url).href,
+  'Margarita Pádel Club':     new URL('/src/assets/6.png',  import.meta.url).href,
+  'Metro Atletik':            new URL('/src/assets/7.png',  import.meta.url).href,
+  'Saque Pádel Club':         new URL('/src/assets/12.png', import.meta.url).href,
+  'Padel Sports Barinas':     new URL('/src/assets/14.png', import.meta.url).href,
+  'Smash Padel':              new URL('/src/assets/15.png', import.meta.url).href,
+  'Arenas Padel Club':        new URL('/src/assets/16.png', import.meta.url).href,
+  'Waikiki Beach Padel Club': new URL('/src/assets/18.png', import.meta.url).href,
+}
+
+// Índice 15 (base-0) = logo 16 (Arenas) — es más pequeño visualmente, se normaliza
+const SMALL_CLUBS = new Set(['Arenas Padel Club'])
 
 export default function Clubs({ byClub }: { byClub: Record<string, number> }) {
   const [hovered, setHovered] = useState<string | null>(null)
@@ -9,13 +32,15 @@ export default function Clubs({ byClub }: { byClub: Record<string, number> }) {
   return (
     <section className="max-w-6xl mx-auto px-6 py-24">
       <h2 className="display text-4xl md:text-6xl text-center mb-3">Clubes participantes</h2>
-      <p className="text-white/50 text-center mb-14">Ocho clubes, un solo objetivo.</p>
+      <p className="text-white/50 text-center mb-14">Once clubes, un solo objetivo.</p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {CLUBS.map((club, i) => {
           const n = byClub[club.name] || 0
           const pct = Math.min(100, Math.round((n / club.goal) * 100))
           const isHovered = hovered === club.name
+          const logo = CLUB_LOGOS[club.name]
+          const isSmall = SMALL_CLUBS.has(club.name)
 
           return (
             <motion.div
@@ -48,7 +73,7 @@ export default function Clubs({ byClub }: { byClub: Record<string, number> }) {
                 style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)' }}
               />
 
-              {/* Inner glow when hovered */}
+              {/* Inner glow cuando hover */}
               <motion.div
                 className="pointer-events-none absolute inset-0 rounded-2xl"
                 animate={{ opacity: isHovered ? 1 : 0 }}
@@ -56,21 +81,35 @@ export default function Clubs({ byClub }: { byClub: Record<string, number> }) {
                 style={{ background: 'radial-gradient(circle at 30% 20%, rgba(249,115,22,0.12), transparent 65%)' }}
               />
 
-              {/* Header */}
+              {/* Header — logo del club */}
               <div className="relative flex items-center gap-3 mb-5">
                 <motion.div
-                  animate={{ scale: isHovered ? 1.08 : 1 }}
+                  animate={{ scale: isHovered ? 1.05 : 1 }}
                   transition={{ duration: 0.3 }}
                   style={{
-                    background: 'linear-gradient(135deg, rgba(249,115,22,0.35), rgba(212,160,23,0.25))',
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))',
                     backdropFilter: 'blur(8px)',
-                    border: '1px solid rgba(212,160,23,0.3)',
-                    boxShadow: isHovered ? '0 0 16px rgba(249,115,22,0.35)' : 'none',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    boxShadow: isHovered ? '0 0 16px rgba(249,115,22,0.25)' : 'none',
                     transition: 'box-shadow 0.3s ease',
                   }}
-                  className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                  className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 p-2"
                 >
-                  <Shield className="text-gold" size={20} />
+                  {logo ? (
+                    <img
+                      src={logo}
+                      alt={club.name}
+                      draggable={false}
+                      className={`w-full object-contain select-none ${
+                        isSmall ? 'scale-125' : ''
+                      }`}
+                      onError={e => { e.currentTarget.style.display = 'none' }}
+                    />
+                  ) : (
+                    <span className="text-gold text-xs font-bold text-center leading-tight">
+                      {club.name.slice(0, 2).toUpperCase()}
+                    </span>
+                  )}
                 </motion.div>
                 <div className="min-w-0">
                   <p className="font-semibold text-sm leading-tight truncate">{club.name}</p>
@@ -95,7 +134,6 @@ export default function Clubs({ byClub }: { byClub: Record<string, number> }) {
                 className="relative h-1.5 rounded-full overflow-hidden"
                 style={{ background: 'rgba(255,255,255,0.08)' }}
               >
-                {/* Track glow */}
                 <motion.div
                   className="absolute inset-0 rounded-full"
                   animate={{ opacity: isHovered ? 1 : 0 }}
