@@ -6,14 +6,10 @@ import { useState, useEffect } from 'react'
 import heroBg from '@/assets/fondo-suma.png'
 
 /**
- * Hero.tsx — v3.5 (Evolución sin Destrucción)
- * - FIX v3.5a: logo 13 (Valkyron) excluido del carrusel — solo aparece
- *   en "Powered by". El array ahora tiene 17 logos (1–18 sin el 13).
- * - FIX v3.5b: velocidad reducida a 45s/35s (era 30s/22s) — más legible
- * - v3.4: width:max-content, visibility:hidden en onError, loop sin salto
- * - v3.3: logos 1–18, logo 16 normalizado
- * - v3.2: fondo import ES, min-height, pt-24, clamp 5rem
- * - v3.0: glow dorado, viñeta, borde dorado aliados, pulse dot, cta-lift
+ * Hero.tsx — v4.1 (Nadbrio en la posición correcta según imagen)
+ * - Bloque Nadbrio movido justo después de aliados y antes de botones.
+ * - Logo 19 excluido del carrusel.
+ * - Resto del código idéntico a v3.5.
  */
 
 const fade = (d: number) => ({
@@ -22,18 +18,16 @@ const fade = (d: number) => ({
   transition: { duration: 0.9, delay: d, ease: 'easeOut' as const },
 })
 
-// Logos 1–18 excluyendo el 13 (Valkyron — solo en "Powered by")
+// Logos 1–18 excluyendo el 13 (Valkyron)
 const sponsorLogos = Array.from({ length: 18 }, (_, i) => {
   const num = i + 1
   if (num === 13) return null
   return new URL(`/src/assets/${num}.png`, import.meta.url).href
 }).filter(Boolean) as string[]
 
-// Logo 13 para "Powered by Valkyron"
 const valkyronLogo = new URL('/src/assets/13.png', import.meta.url).href
+const nadbrioLogo = new URL('/src/assets/19.png', import.meta.url).href
 
-// Logo 16 (Arenas Padel Club) tiene tamaño visual menor — se normaliza vía CSS
-// Con el 13 excluido, el logo 16 queda en índice 14 (base-0)
 const SMALL_LOGO_INDEX = 14
 
 export default function Hero() {
@@ -175,7 +169,7 @@ export default function Hero() {
           El deporte une al país para ayudar a quienes más lo necesitan.
         </motion.p>
 
-        {/* Carrusel de logos aliados — 17 logos (1–18 sin el 13) */}
+        {/* Carrusel de aliados — 17 logos (1–18 sin el 13) */}
         <motion.div
           {...fade(0.95)}
           className="relative mt-6 md:mt-8 mx-auto max-w-4xl rounded-2xl md:rounded-3xl px-3 py-3 md:px-4 md:py-4 bg-white/10 backdrop-blur-2xl border border-white/20 shadow-2xl overflow-hidden"
@@ -202,8 +196,37 @@ export default function Hero() {
           </div>
         </motion.div>
 
+        {/* ⭐ BLOQUE NADBRIO — justo después de aliados, antes de botones (según tu imagen) */}
         <motion.div
-          {...fade(1.15)}
+          {...fade(1.1)}
+          className="mt-6 md:mt-8 mx-auto max-w-3xl rounded-2xl bg-white/5 backdrop-blur-md border border-gold/30 shadow-lg shadow-gold/10 p-4 md:p-5 flex flex-col sm:flex-row items-center gap-4 md:gap-6"
+        >
+          <div className="flex-shrink-0">
+            <img
+              src={nadbrioLogo}
+              alt="Nadbrio"
+              loading="lazy"
+              draggable={false}
+              className="h-12 md:h-16 w-auto object-contain select-none"
+              onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+            />
+          </div>
+          <div className="text-left text-white/90">
+            <h3 className="text-xs md:text-sm uppercase tracking-widest text-gold/80 font-semibold">
+              Gracias por ser parte de esencial de la reconstrucción de Venezuela.
+            </h3>
+            <p className="text-[11px] md:text-sm leading-relaxed mt-0.5 text-white/70">
+              Contar con el compromiso social de la Fundación Nadbio no es solo un apoyo,
+              es una reafirmación de nuestra misión, trabajar unidos por la reconstrucción
+              y el bienestar de nuestro país
+
+            </p>
+          </div>
+        </motion.div>
+
+        {/* Botones — ahora debajo del bloque Nadbrio */}
+        <motion.div
+          {...fade(1.25)}
           className="mt-6 md:mt-8 flex flex-col sm:flex-row gap-3 md:gap-4 justify-center max-w-xs sm:max-w-none mx-auto"
         >
           <Link to="/registro" className="btn-primary cta-lift w-full sm:w-auto text-center">
@@ -214,7 +237,7 @@ export default function Hero() {
           </a>
         </motion.div>
 
-        {/* Powered by Valkyron — logo 13 exclusivo */}
+        {/* Powered by Valkyron — se mantiene al final */}
         <motion.div
           {...fade(1.4)}
           className="mt-6 md:mt-8 flex flex-col items-center opacity-70"
