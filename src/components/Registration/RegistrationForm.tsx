@@ -31,7 +31,7 @@ const BANK_DATA = {
   rif: 'J-30044432-5',
 }
 
-const PRECIO_EUR = 20
+const PRECIO_USD = 20
 
 // ── Categorías especiales por club ───────────────────────────────────────────
 const CLUB_CATEGORIES: Record<string, Record<'M' | 'F', string[]>> = {
@@ -315,7 +315,7 @@ export default function RegistrationForm() {
 
   useEffect(() => { getTasaBCV().then(setTasa) }, [])
 
-  const totalBs = tasa ? PRECIO_EUR * tasa : null
+  const totalBs = tasa ? PRECIO_USD * tasa : null
 
   const setMain = (k: keyof ReturnType<typeof emptyPlayer>, v: string) =>
     setForm(f => ({ ...f, [k]: v }))
@@ -468,7 +468,7 @@ export default function RegistrationForm() {
             <div className="flex items-center gap-2 mb-1">
               <Landmark size={16} className="text-gold" />
               <p className="text-xs uppercase tracking-widest text-gold">
-                Información de pago — {PRECIO_EUR} EUR{' '}
+                Información de pago — {PRECIO_USD} USD{' '}
                 <span className="normal-case tracking-normal text-white/40 text-[11px]">por persona</span>
               </p>
             </div>
