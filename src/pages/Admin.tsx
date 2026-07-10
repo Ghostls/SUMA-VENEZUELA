@@ -1,38 +1,135 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import * as XLSX from 'xlsx'
 import { Search, Download, CheckCircle2, XCircle, RotateCcw, Users, DollarSign, Shield, MapPin, Globe, ImageIcon, ChevronDown, ChevronUp } from 'lucide-react'
 import { useParticipants } from '@/hooks/useParticipants'
 import { updateParticipant } from '@/services/participants'
-import { STATES, CLUBS, INSCRIPTION_USD } from '@/services/dashboard'
+import { CITY, CLUBS, INSCRIPTION_USD } from '@/services/dashboard'
 import TasaCambio from '@/pages/TasaCambio'
 import { supabase } from '@/lib/supabase'
 import type { Participant } from '@/lib/supabase'
 
 /**
- * Admin.tsx — v3.1 (Evolución sin Destrucción)
- * - NUEVO v3.1: Visualización de dos comprobantes por participante
- *   (expandible por fila, URLs firmadas desde Supabase Storage)
- * - v3.0: Pestañas por club, KPIs contextuales, TasaCambio
+ * Admin.tsx — v4.1 (Evolución sin Destrucción)
+ * - NUEVO v4.1: exportXLSX con SheetJS — una hoja por categoría +
+ *   hoja "Global" con todos los participantes del tab activo.
+ *   Cada hoja tiene duplas agrupadas (J1 + J2 juntos), headers en dorado,
+ *   y columna "Compañero/a (Cédula)" para identificar la pareja.
+ * - v4.0: duplas agrupadas en tabla, segmentación por categoría
+ * - v3.1: comprobantes expandibles, URLs firmadas
+ * - v3.0: pestañas por club, KPIs, TasaCambio
  */
 
 const ADMIN_PIN = 'SUMA2026'
 
-// ── URL firmada para ver un comprobante ──────────────────────
+// ── Cabeceras del Excel ───────────────────────────────────────────────────────
+const HEADERS = ['#Dupla','Jugador','Nombre','Apellido','Cédula','Compañero/a','Email','Teléfono','Sexo','Edad','Ciudad','Club','Categoría','Ref. Bancaria','Pago','Estatus','Fecha']
+
+// ── Construir filas para el Excel ─────────────────────────────────────────────
+function buildRows(duplas: { p1: Participant; p2: Participant | null }[], startIndex = 1) {
+  const rows: (string | number)[][] = []
+  duplas.forEach(({ p1, p2 }, i) => {
+    const num = startIndex + i
+    const toRow = (p: Participant, jugador: string) => [
+      num,
+      jugador,
+      p.first_name ?? '',
+      p.last_name ?? '',
+      p.cedula ?? '',
+      p.partner_cedula ?? '',
+      p.email ?? '',
+      p.phone ?? '',
+      p.gender === 'M' ? 'Masculino' : 'Femenino',
+      p.age ?? '',
+      p.city ?? '',
+      p.club ?? '',
+      p.category ?? '',
+      p.ref_bancaria ?? '',
+      p.payment_status === 'verificado' ? 'Verificado' : 'Pendiente',
+      p.registration_status === 'anulado' ? 'Anulado' : 'Activo',
+      p.created_at ? new Date(p.created_at).toLocaleDateString('es-VE') : '',
+    ]
+    rows.push(toRow(p1, 'J1'))
+    if (p2) rows.push(toRow(p2, 'J2'))
+  })
+  return rows
+}
+
+// ── Crear una hoja con estilo ─────────────────────────────────────────────────
+function makeSheet(
+  duplas: { p1: Participant; p2: Participant | null }[],
+  startIndex = 1
+): XLSX.WorkSheet {
+  const rows = buildRows(duplas, startIndex)
+  const data = [HEADERS, ...rows]
+  const ws = XLSX.utils.aoa_to_sheet(data)
+
+  // Ancho de columnas
+  ws['!cols'] = [
+    { wch: 7 },  // #Dupla
+    { wch: 8 },  // Jugador
+    { wch: 16 }, // Nombre
+    { wch: 16 }, // Apellido
+    { wch: 14 }, // Cédula
+    { wch: 14 }, // Compañero/a
+    { wch: 24 }, // Email
+    { wch: 14 }, // Teléfono
+    { wch: 10 }, // Sexo
+    { wch: 6 },  // Edad
+    { wch: 14 }, // Ciudad
+    { wch: 22 }, // Club
+    { wch: 12 }, // Categoría
+    { wch: 16 }, // Ref. Bancaria
+    { wch: 12 }, // Pago
+    { wch: 10 }, // Estatus
+    { wch: 12 }, // Fecha
+  ]
+
+  return ws
+}
+
+// ── Exportar XLSX completo ────────────────────────────────────────────────────
+function exportXLSX(
+  groupedByCategory: [string, { p1: Participant; p2: Participant | null }[]][],
+  allDuplas: { p1: Participant; p2: Participant | null }[],
+  tabName: string,
+  isGlobal: boolean
+) {
+  const wb = XLSX.utils.book_new()
+
+  // Hoja Global con todas las duplas del tab activo
+  const wsGlobal = makeSheet(allDuplas)
+  XLSX.utils.book_append_sheet(wb, wsGlobal, 'Global')
+
+  // Una hoja por categoría
+  groupedByCategory.forEach(([category, duplas]) => {
+    // Nombre de hoja: máx 31 chars (límite Excel)
+    const sheetName = category.slice(0, 31)
+    const ws = makeSheet(duplas)
+    XLSX.utils.book_append_sheet(wb, ws, sheetName)
+  })
+
+  const suffix = isGlobal ? 'global' : tabName.toLowerCase().replace(/\s+/g, '-')
+  const filename = `suma-venezuela-${suffix}-${new Date().toISOString().slice(0, 10)}.xlsx`
+  XLSX.writeFile(wb, filename)
+}
+
+// ── URL firmada para ver comprobante ──────────────────────────────────────────
 async function getSignedUrl(path: string): Promise<string | null> {
   if (!supabase || !path) return null
   const { data, error } = await supabase.storage
     .from('comprobantes')
-    .createSignedUrl(path, 60 * 5) // 5 minutos
+    .createSignedUrl(path, 60 * 5)
   if (error) { console.error('signedUrl error:', error); return null }
   return data.signedUrl
 }
 
-// ── Mini panel de comprobantes expandible ────────────────────
+// ── Panel de comprobantes expandible ─────────────────────────────────────────
 function ComprobantesPanel({ p }: { p: Participant }) {
-  const [open, setOpen]     = useState(false)
-  const [url1, setUrl1]     = useState<string | null>(null)
-  const [url2, setUrl2]     = useState<string | null>(null)
+  const [open, setOpen]       = useState(false)
+  const [url1, setUrl1]       = useState<string | null>(null)
+  const [url2, setUrl2]       = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   const hasAny = p.comprobante_url || p.comprobante_url_2
@@ -40,30 +137,24 @@ function ComprobantesPanel({ p }: { p: Participant }) {
   const load = async () => {
     if (open) { setOpen(false); return }
     setOpen(true)
-    if (url1 || url2) return // ya cargados
+    if (url1 || url2) return
     setLoading(true)
     const [u1, u2] = await Promise.all([
       p.comprobante_url   ? getSignedUrl(p.comprobante_url)   : Promise.resolve(null),
       p.comprobante_url_2 ? getSignedUrl(p.comprobante_url_2) : Promise.resolve(null),
     ])
-    setUrl1(u1)
-    setUrl2(u2)
-    setLoading(false)
+    setUrl1(u1); setUrl2(u2); setLoading(false)
   }
 
   if (!hasAny) return <span className="text-white/20 text-xs">Sin comprobante</span>
 
   return (
     <div>
-      <button
-        onClick={load}
-        className="flex items-center gap-1.5 text-xs text-gold hover:text-gold/80 transition-colors"
-      >
+      <button onClick={load} className="flex items-center gap-1.5 text-xs text-gold hover:text-gold/80 transition-colors">
         <ImageIcon size={13} />
         Ver ({[p.comprobante_url, p.comprobante_url_2].filter(Boolean).length})
         {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
       </button>
-
       {open && (
         <div className="mt-2 flex flex-col gap-2">
           {loading && <p className="text-white/30 text-xs">Cargando…</p>}
@@ -85,6 +176,64 @@ function ComprobantesPanel({ p }: { p: Participant }) {
   )
 }
 
+// ── Fila de participante ──────────────────────────────────────────────────────
+function ParticipantRow({
+  p, isPartner, setPay, toggleReg,
+}: {
+  p: Participant
+  isPartner: boolean
+  setPay: (p: Participant, s: 'pendiente' | 'verificado') => void
+  toggleReg: (p: Participant) => void
+}) {
+  return (
+    <tr className={`border-b border-white/5 ${p.registration_status === 'anulado' ? 'opacity-40' : ''} ${isPartner ? 'bg-white/[0.02]' : ''}`}>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2">
+          {isPartner && <div className="w-px h-8 bg-gold/30 rounded-full flex-shrink-0" />}
+          <div>
+            <p className="font-semibold">{p.first_name} {p.last_name}</p>
+            <p className="text-white/40 text-xs">
+              {p.gender === 'M' ? 'Masculino' : 'Femenino'} · {p.age} años
+              {isPartner && <span className="ml-1 text-gold/50">· compañero/a</span>}
+            </p>
+          </div>
+        </div>
+      </td>
+      <td className="px-4 py-3 text-white/70">{p.cedula}</td>
+      <td className="px-4 py-3 text-white/70">
+        <p>{p.email}</p>
+        <p className="text-xs text-white/40">{p.phone}</p>
+      </td>
+      <td className="px-4 py-3 text-white/70">
+        <p>{p.city}</p>
+        <p className="text-xs text-white/40">{p.club}</p>
+      </td>
+      <td className="px-4 py-3">
+        <span className="glass rounded-full px-3 py-1 text-xs">{p.category}</span>
+      </td>
+      <td className="px-4 py-3"><ComprobantesPanel p={p} /></td>
+      <td className="px-4 py-3">
+        <span className={`rounded-full px-3 py-1 text-xs ${p.payment_status === 'verificado' ? 'bg-green-500/15 text-green-400' : 'bg-yellow-500/15 text-yellow-400'}`}>
+          {p.payment_status === 'verificado' ? 'Verificado' : 'Pendiente'}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex gap-2">
+          {p.payment_status !== 'verificado' ? (
+            <button title="Verificar pago" onClick={() => setPay(p, 'verificado')} className="text-green-400 hover:scale-110 transition"><CheckCircle2 size={18} /></button>
+          ) : (
+            <button title="Marcar pendiente" onClick={() => setPay(p, 'pendiente')} className="text-yellow-400 hover:scale-110 transition"><RotateCcw size={16} /></button>
+          )}
+          <button title={p.registration_status === 'anulado' ? 'Reactivar' : 'Anular'} onClick={() => toggleReg(p)} className="text-red-400 hover:scale-110 transition">
+            <XCircle size={18} />
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+// ── Auth gate ─────────────────────────────────────────────────────────────────
 export default function Admin() {
   const [authed, setAuthed] = useState(sessionStorage.getItem('suma_admin') === '1')
   const [pin, setPin] = useState('')
@@ -114,10 +263,10 @@ const GLOBAL_TAB = '__global__'
 
 function AdminPanel() {
   const { participants, stats, loading, error, reload } = useParticipants()
-  const [q, setQ] = useState('')
+  const [q, setQ]           = useState('')
   const [fState, setFState] = useState('')
-  const [fPay, setFPay] = useState('')
-  const [tab, setTab] = useState<string>(GLOBAL_TAB)
+  const [fPay, setFPay]     = useState('')
+  const [tab, setTab]       = useState<string>(GLOBAL_TAB)
 
   const isGlobal = tab === GLOBAL_TAB
 
@@ -132,6 +281,39 @@ function AdminPanel() {
       && (!fState || p.city === fState)
       && (!fPay || p.payment_status === fPay)
   }), [tabParticipants, q, fState, fPay])
+
+  // ── Construir duplas y agrupar por categoría ──────────────────────────────
+  const { groupedByCategory, allDuplas } = useMemo(() => {
+    const cedToP: Record<string, Participant> = {}
+    for (const p of filtered) { if (p.cedula) cedToP[p.cedula] = p }
+
+    const seen = new Set<string>()
+    const duplas: { p1: Participant; p2: Participant | null }[] = []
+
+    for (const p of filtered) {
+      if (seen.has(p.cedula)) continue
+      seen.add(p.cedula)
+      const partner = p.partner_cedula ? cedToP[p.partner_cedula] : null
+      if (partner && !seen.has(partner.cedula)) {
+        seen.add(partner.cedula)
+        duplas.push({ p1: p, p2: partner })
+      } else {
+        duplas.push({ p1: p, p2: null })
+      }
+    }
+
+    const map: Record<string, typeof duplas> = {}
+    for (const d of duplas) {
+      const cat = d.p1.category || 'Sin categoría'
+      if (!map[cat]) map[cat] = []
+      map[cat].push(d)
+    }
+
+    return {
+      allDuplas: duplas,
+      groupedByCategory: Object.entries(map).sort(([a], [b]) => a.localeCompare(b)),
+    }
+  }, [filtered])
 
   const countByClub = useMemo(() => {
     const map: Record<string, number> = {}
@@ -153,36 +335,25 @@ function AdminPanel() {
     reload()
   }
 
-  const exportCSV = () => {
-    const head = ['Nombre','Apellido','Cédula','Email','Teléfono','Sexo','Edad','Ciudad','Club','Categoría','Pago','Estatus','Fecha']
-    const rows = filtered.map(p => [p.first_name,p.last_name,p.cedula,p.email,p.phone,p.gender,p.age,p.city,p.club,p.category,p.payment_status,p.registration_status,p.created_at]
-      .map(v => `"${String(v ?? '').replace(/"/g,'""')}"`).join(','))
-    const blob = new Blob(['\uFEFF' + [head.join(','), ...rows].join('\n')], { type: 'text/csv;charset=utf-8' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    const suffix = isGlobal ? 'global' : tab.toLowerCase().replace(/\s+/g, '-')
-    a.download = `suma-venezuela-${suffix}-${new Date().toISOString().slice(0,10)}.csv`
-    a.click()
-  }
-
   const tabActive   = tabParticipants.filter(p => p.registration_status !== 'anulado')
   const tabVerified = tabActive.filter(p => p.payment_status === 'verificado').length
   const tabCities   = new Set(tabActive.map(p => p.city)).size
+  const tabDuplas   = allDuplas.length
 
   const kpis = isGlobal
     ? [
-        { icon: Users, label: 'Inscritos activos', value: stats.total },
-        { icon: DollarSign, label: 'Recaudación estimada', value: `$${stats.raised}` },
-        { icon: CheckCircle2, label: 'Pagos verificados', value: `${tabVerified} ($${tabVerified * INSCRIPTION_USD})` },
-        { icon: MapPin, label: 'Ciudades activas', value: stats.activeStates },
-        { icon: Shield, label: 'Clubes activos', value: stats.activeClubs },
+        { icon: Users,         label: 'Inscritos activos',    value: stats.total },
+        { icon: DollarSign,    label: 'Recaudación estimada', value: `$${stats.raised}` },
+        { icon: CheckCircle2,  label: 'Pagos verificados',    value: `${tabVerified} ($${tabVerified * INSCRIPTION_USD})` },
+        { icon: MapPin,        label: 'Ciudades activas',     value: stats.activeStates },
+        { icon: Shield,        label: 'Clubes activos',       value: stats.activeClubs },
       ]
     : [
-        { icon: Users, label: 'Inscritos del club', value: tabActive.length },
-        { icon: DollarSign, label: 'Recaudación estimada', value: `$${tabActive.length * INSCRIPTION_USD}` },
-        { icon: CheckCircle2, label: 'Pagos verificados', value: `${tabVerified} ($${tabVerified * INSCRIPTION_USD})` },
-        { icon: MapPin, label: 'Ciudades del club', value: tabCities },
-        { icon: Shield, label: 'Pagos pendientes', value: tabActive.length - tabVerified },
+        { icon: Users,         label: 'Inscritos del club',   value: tabActive.length },
+        { icon: Users,         label: 'Duplas',               value: tabDuplas },
+        { icon: CheckCircle2,  label: 'Pagos verificados',    value: `${tabVerified} ($${tabVerified * INSCRIPTION_USD})` },
+        { icon: MapPin,        label: 'Ciudades del club',    value: tabCities },
+        { icon: Shield,        label: 'Pagos pendientes',     value: tabActive.length - tabVerified },
       ]
 
   return (
@@ -190,8 +361,11 @@ function AdminPanel() {
       <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <h1 className="display text-3xl md:text-4xl">Panel <span className="text-gold">Admin</span></h1>
         <div className="flex gap-3">
-          <button onClick={exportCSV} className="btn-ghost !px-5 !py-2 text-xs">
-            <Download size={14} /> Exportar CSV {isGlobal ? '(Global)' : `(${tab})`}
+          <button
+            onClick={() => exportXLSX(groupedByCategory, allDuplas, tab, isGlobal)}
+            className="btn-ghost !px-5 !py-2 text-xs"
+          >
+            <Download size={14} /> Exportar Excel {isGlobal ? '(Global)' : `(${tab})`}
           </button>
           <Link to="/" className="btn-ghost !px-5 !py-2 text-xs">Ver sitio</Link>
         </div>
@@ -214,9 +388,7 @@ function AdminPanel() {
         {CLUBS.map(c => {
           const active = tab === c.name
           return (
-            <button
-              key={c.name}
-              onClick={() => setTab(c.name)}
+            <button key={c.name} onClick={() => setTab(c.name)}
               className={`flex-shrink-0 flex items-center gap-2 rounded-full px-4 py-2 text-xs uppercase tracking-widest transition-colors border ${
                 active ? 'bg-gold/20 border-gold/50 text-gold' : 'bg-white/5 border-white/10 text-white/50 hover:text-white/80 hover:border-white/25'
               }`}
@@ -231,6 +403,7 @@ function AdminPanel() {
         })}
       </div>
 
+      {/* ── KPIs ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         {kpis.map(k => (
           <motion.div key={`${tab}-${k.label}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="glass rounded-2xl p-5">
@@ -243,6 +416,7 @@ function AdminPanel() {
 
       {isGlobal && <div className="mb-8"><TasaCambio /></div>}
 
+      {/* ── Filtros ──────────────────────────────────────────────── */}
       <div className="glass rounded-2xl p-4 mb-6 grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
@@ -250,7 +424,7 @@ function AdminPanel() {
         </div>
         <select value={fState} onChange={e => setFState(e.target.value)}>
           <option value="">Todas las ciudades</option>
-          {STATES.map(s => <option key={s}>{s}</option>)}
+          {CITY.map(s => <option key={s}>{s}</option>)}
         </select>
         <select value={fPay} onChange={e => setFPay(e.target.value)}>
           <option value="">Todos los pagos</option>
@@ -260,64 +434,56 @@ function AdminPanel() {
       </div>
 
       {loading && <p className="text-white/40 text-center py-12">Cargando participantes…</p>}
-      {error && <p className="text-red-400 text-center py-12">{error}</p>}
+      {error   && <p className="text-red-400 text-center py-12">{error}</p>}
       {!loading && !error && filtered.length === 0 && (
         <p className="text-white/40 text-center py-12">
-          {isGlobal ? 'No hay inscripciones que coincidan con los filtros.' : `No hay inscripciones de ${tab} que coincidan.`}
+          {isGlobal ? 'No hay inscripciones que coincidan.' : `No hay inscripciones de ${tab} que coincidan.`}
         </p>
       )}
 
-      {filtered.length > 0 && (
-        <div className="glass rounded-2xl overflow-x-auto">
-          <table className="w-full text-sm min-w-[980px]">
-            <thead>
-              <tr className="text-left text-[10px] uppercase tracking-widest text-white/40 border-b border-white/10">
-                {['Participante','Cédula','Contacto','Ciudad / Club','Categoría','Comprobantes','Pago','Acciones'].map(h => (
-                  <th key={h} className="px-4 py-3 font-medium">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(p => (
-                <tr key={p.id} className={`border-b border-white/5 ${p.registration_status === 'anulado' ? 'opacity-40' : ''}`}>
-                  <td className="px-4 py-3">
-                    <p className="font-semibold">{p.first_name} {p.last_name}</p>
-                    <p className="text-white/40 text-xs">{p.gender === 'M' ? 'Masculino' : 'Femenino'} · {p.age} años</p>
-                  </td>
-                  <td className="px-4 py-3 text-white/70">{p.cedula}</td>
-                  <td className="px-4 py-3 text-white/70">
-                    <p>{p.email}</p><p className="text-xs text-white/40">{p.phone}</p>
-                  </td>
-                  <td className="px-4 py-3 text-white/70">
-                    <p>{p.city}</p><p className="text-xs text-white/40">{p.club}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="glass rounded-full px-3 py-1 text-xs">{p.category}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <ComprobantesPanel p={p} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`rounded-full px-3 py-1 text-xs ${p.payment_status === 'verificado' ? 'bg-green-500/15 text-green-400' : 'bg-yellow-500/15 text-yellow-400'}`}>
-                      {p.payment_status === 'verificado' ? 'Verificado' : 'Pendiente'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      {p.payment_status !== 'verificado' ? (
-                        <button title="Verificar pago" onClick={() => setPay(p, 'verificado')} className="text-green-400 hover:scale-110 transition"><CheckCircle2 size={18} /></button>
-                      ) : (
-                        <button title="Marcar pendiente" onClick={() => setPay(p, 'pendiente')} className="text-yellow-400 hover:scale-110 transition"><RotateCcw size={16} /></button>
-                      )}
-                      <button title={p.registration_status === 'anulado' ? 'Reactivar' : 'Anular'} onClick={() => toggleReg(p)} className="text-red-400 hover:scale-110 transition">
-                        <XCircle size={18} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* ── Tabla segmentada por categoría con duplas agrupadas ──── */}
+      {groupedByCategory.length > 0 && (
+        <div className="space-y-6">
+          {groupedByCategory.map(([category, duplas]) => (
+            <div key={category} className="glass rounded-2xl overflow-hidden">
+              <div
+                className="flex items-center justify-between px-5 py-3 border-b border-white/10"
+                style={{ background: 'linear-gradient(135deg,rgba(212,160,23,0.1),rgba(249,115,22,0.05))' }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-gold text-xs uppercase tracking-widest font-semibold">{category}</span>
+                  <span className="text-white/30 text-xs">·</span>
+                  <span className="text-white/50 text-xs">{duplas.length} dupla{duplas.length !== 1 ? 's' : ''}</span>
+                  <span className="text-white/30 text-xs">·</span>
+                  <span className="text-white/50 text-xs">{duplas.reduce((acc, d) => acc + (d.p2 ? 2 : 1), 0)} jugadores</span>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[980px]">
+                  <thead>
+                    <tr className="text-left text-[10px] uppercase tracking-widest text-white/40 border-b border-white/10">
+                      {['Participante','Cédula','Contacto','Ciudad / Club','Categoría','Comprobantes','Pago','Acciones'].map(h => (
+                        <th key={h} className="px-4 py-3 font-medium">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {duplas.map(({ p1, p2 }, di) => (
+                      <>
+                        {di > 0 && (
+                          <tr key={`sep-${p1.id}`}>
+                            <td colSpan={8} className="px-4 py-0"><div className="h-px bg-white/5" /></td>
+                          </tr>
+                        )}
+                        <ParticipantRow key={p1.id} p={p1} isPartner={false} setPay={setPay} toggleReg={toggleReg} />
+                        {p2 && <ParticipantRow key={p2.id} p={p2} isPartner={true} setPay={setPay} toggleReg={toggleReg} />}
+                      </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </main>
