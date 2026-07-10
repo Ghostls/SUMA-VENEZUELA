@@ -1,15 +1,27 @@
 import { Link, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { Heart } from 'lucide-react'
 import navLogo from '@/assets/11.png'
 
 /**
- * Navbar.tsx — v2.1 (Evolución sin Destrucción)
- * - FIX v2.1: import ES directo del logo (fix pantalla negra / logo roto en producción)
+ * Navbar.tsx — v2.2 (Evolución sin Destrucción)
+ * - NUEVO v2.2: botón "Donar aquí" con scroll a #donacion en home,
+ *   o redirect a /#donacion desde otras páginas
+ * - v2.1: import ES directo del logo
  * - v2.0: logo 11.png reemplaza texto, fallback al texto si falla
  */
 
 export default function Navbar() {
   const { pathname } = useLocation()
+
+  const scrollToDonation = () => {
+    if (pathname === '/') {
+      document.getElementById('donacion')?.scrollIntoView({ behavior: 'smooth' })
+    } else {
+      window.location.href = '/#donacion'
+    }
+  }
+
   return (
     <motion.header
       initial={{ y: -40, opacity: 0 }}
@@ -35,7 +47,17 @@ export default function Navbar() {
             SUMA <span className="text-gold">VENEZUELA</span>
           </span>
         </Link>
-        <div className="flex items-center gap-3">
+
+        <div className="flex items-center gap-2 md:gap-3">
+          {/* Botón Donar — siempre visible */}
+          <button
+            onClick={scrollToDonation}
+            className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs uppercase tracking-widest transition-all border border-pink-400/30 bg-pink-500/10 text-pink-300 hover:bg-pink-500/20 hover:border-pink-400/50"
+          >
+            <Heart size={12} className="fill-pink-400/40" />
+            <span className="hidden sm:inline">Donar</span>
+          </button>
+
           {pathname !== '/registro' && (
             <Link to="/registro" className="btn-primary !px-5 !py-2 text-xs">Inscribirme</Link>
           )}

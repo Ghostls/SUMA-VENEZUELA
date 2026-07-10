@@ -7,7 +7,7 @@ import { getTasaBCV, setTasaBCV } from '@/services/Config'
  * El admin escribe la tasa manualmente; se sincroniza con el RegistrationForm.
  */
 
-const PRECIO_USD = 20
+const PRECIO_EUR = 20
 
 export default function TasaCambio() {
   const [tasa, setTasa]       = useState('')
@@ -41,7 +41,7 @@ export default function TasaCambio() {
   }
 
   const tasaNum = parseFloat(tasa.replace(',', '.'))
-  const totalBs = !isNaN(tasaNum) && tasaNum > 0 ? PRECIO_USD * tasaNum : null
+  const totalBs = !isNaN(tasaNum) && tasaNum > 0 ? PRECIO_EUR * tasaNum : null
 
   return (
     <div className="glass rounded-2xl p-5 md:p-6">
@@ -86,7 +86,7 @@ export default function TasaCambio() {
 
       {totalBs !== null && (
         <p className="text-xs text-white/50 mt-3">
-          Vista previa: la inscripción de {PRECIO_USD} USD se mostrará como{' '}
+          Vista previa: la inscripción de {PRECIO_EUR} EUR se mostrará como{' '}
           <span className="text-gold font-mono">
             Bs. {totalBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>

@@ -9,6 +9,7 @@ import VenezuelaMap from '@/components/Map/VenezuelaMap'
 import EventTimeline from '@/components/Timeline/EventTimeline'
 import Impact from '@/components/Sections/Impact'
 import Transparency from '@/components/Sections/Transparency'
+import DonationSection from '@/components/Sections/DonationSection'
 import { useParticipants } from '@/hooks/useParticipants'
 
 export default function Home() {
@@ -26,6 +27,7 @@ export default function Home() {
         <EventTimeline />
         <Impact />
         <Transparency />
+        <DonationSection />
       </main>
       <Footer />
     </>
